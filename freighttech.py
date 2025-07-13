@@ -28,9 +28,29 @@ class FreightTech(Agent):
         self.consecutive_failures = 0
         self.coverage_rate = 0.0
         
-        # Strategy parameters
-        self.max_negotiation_rounds = 3
-        self.patience_factor = 0.8  # How patient to be (0-1, higher = more patient)
+        # Load strategy parameters from config
+        broker_config = self._get_broker_config()
+        self.max_negotiation_rounds = broker_config.get('max_negotiation_rounds', 3)
+        self.patience_factor = broker_config.get('patience_factor', 0.8)
+        
+        # Urgency thresholds and price multipliers
+        urgency_thresholds = broker_config.get('urgency_thresholds', {})
+        self.very_urgent_threshold = urgency_thresholds.get('very_urgent', 0.8)
+        self.moderate_urgent_threshold = urgency_thresholds.get('moderate_urgent', 0.5)
+        
+        price_multipliers = broker_config.get('price_multipliers', {})
+        self.very_urgent_multiplier = price_multipliers.get('very_urgent', 1.3)
+        self.moderate_urgent_multiplier = price_multipliers.get('moderate_urgent', 1.15)
+        self.not_urgent_multiplier = price_multipliers.get('not_urgent', 1.0)
+    
+    def _get_broker_config(self):
+        """Get broker configuration from model."""
+        if hasattr(self.model, 'config') and self.model.config:
+            if hasattr(self.model.config, 'get_broker_params'):
+                return self.model.config.get_broker_params()
+            elif isinstance(self.model.config, dict):
+                return self.model.config.get('broker', {})
+        return {}
         
     def add_load(self, load: Load):
         """Add a new load to manage."""
@@ -42,13 +62,13 @@ class FreightTech(Agent):
         base_threshold = load.market_rate
         urgency_factor = load.get_urgency_factor()
         
-        # More urgent = willing to pay more
-        if urgency_factor > 0.8:  # Very urgent (< 20% lead time left)
-            return base_threshold * 1.3
-        elif urgency_factor > 0.5:  # Moderate urgency
-            return base_threshold * 1.15
+        # More urgent = willing to pay more (using config values)
+        if urgency_factor > self.very_urgent_threshold:
+            return base_threshold * self.very_urgent_multiplier
+        elif urgency_factor > self.moderate_urgent_threshold:
+            return base_threshold * self.moderate_urgent_multiplier
         else:  # Not urgent
-            return base_threshold * 0.95  # Try to get below market rate
+            return base_threshold * self.not_urgent_multiplier
     
     def should_accept_bid(self, load: Load, bid: float, carrier_id: str) -> bool:
         """Decide whether to accept a carrier's bid."""

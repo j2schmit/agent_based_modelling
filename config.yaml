@@ -1,0 +1,110 @@
+# Freight Brokerage ABM Configuration
+
+# Simulation-level parameters
+simulation:
+  num_carriers: 20
+  grid_size: 100
+  time_step: 0.1  # Fraction of day per step
+  load_generation_rate: 0.3  # Loads per step
+  weekly_volume_variation: 0.2  # Market volatility (±%)
+  steps_per_week: 70
+
+# FreightTech broker strategy parameters
+broker:
+  max_negotiation_rounds: 3
+  patience_factor: 0.8  # How patient in negotiations (0-1)
+  
+  # Urgency-based pricing strategy
+  urgency_thresholds:
+    very_urgent: 0.8  # > 80% of lead time used
+    moderate_urgent: 0.5  # > 50% of lead time used
+  
+  price_multipliers:
+    very_urgent: 1.3  # 30% above market rate
+    moderate_urgent: 1.15  # 15% above market rate
+    not_urgent: 1.0  # At market rate
+
+# Carrier behavior parameters
+carrier:
+  # Cost structure ranges (min, max)
+  cost_per_mile:
+    min: 1.2
+    max: 1.8
+  
+  fixed_cost:
+    min: 100
+    max: 300
+  
+  # Profit and behavior ranges
+  desired_margin:
+    min: 0.15  # 15%
+    max: 0.35  # 35%
+  
+  max_bid_distance:
+    min: 200
+    max: 500
+  
+  aggressiveness:
+    min: 0.1
+    max: 0.9
+
+# Load generation parameters
+load:
+  penalty_rate: 0.20  # Base penalty as fraction of market rate
+  penalty_escalation: 1.5  # Multiplier for consecutive failures
+  
+  # Lead time distribution (days)
+  lead_time:
+    min: 0.5
+    max: 5.0
+    mean: 3.0
+    std: 1.0
+  
+  # Market rate calculation
+  pricing:
+    base_rate_per_mile: 2.0
+    minimum_rate: 500
+    rate_variation: 100  # ± random variation
+
+# Scenario presets for easy switching
+scenarios:
+  baseline:
+    description: "Standard market conditions"
+    # Uses default values above
+  
+  tight_market:
+    description: "High demand, low carrier availability"
+    simulation:
+      num_carriers: 15
+      load_generation_rate: 0.5
+    
+  loose_market:
+    description: "Low demand, high carrier availability"
+    simulation:
+      num_carriers: 30
+      load_generation_rate: 0.2
+  
+  urgent_freight:
+    description: "More time-sensitive loads"
+    load:
+      lead_time:
+        min: 0.25
+        max: 2.0
+        mean: 1.0
+        std: 0.5
+  
+  high_penalties:
+    description: "Increased penalty pressure"
+    load:
+      penalty_rate: 0.35
+      penalty_escalation: 2.0
+  
+  aggressive_carriers:
+    description: "More competitive carrier bidding"
+    carrier:
+      aggressiveness:
+        min: 0.6
+        max: 0.95
+      desired_margin:
+        min: 0.10
+        max: 0.25

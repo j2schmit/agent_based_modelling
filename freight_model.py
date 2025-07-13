@@ -1,6 +1,6 @@
 import random
 import math
-from typing import List, Optional
+from typing import List, Optional, Union
 from mesa import Model
 from mesa import Agent, Model
 from mesa.datacollection import DataCollector
@@ -9,6 +9,7 @@ from mesa.space import ContinuousSpace
 from load import Load
 from carrier import Carrier
 from freighttech import FreightTech
+from config_loader import ConfigLoader
 
 
 class FreightBrokerageModel(Model):
@@ -17,26 +18,51 @@ class FreightBrokerageModel(Model):
     """
     
     def __init__(self, 
-                 num_carriers: int = 20,
-                 grid_size: int = 100,
-                 time_step: float = 0.1,  # Fraction of day per step
-                 load_generation_rate: float = 0.3,  # Loads per step
-                 weekly_volume_variation: float = 0.2):
+                 config: Optional[Union[ConfigLoader, dict]] = None,
+                 scenario: Optional[str] = None,
+                 # Backward compatibility parameters
+                 num_carriers: Optional[int] = None,
+                 grid_size: Optional[int] = None,
+                 time_step: Optional[float] = None,
+                 load_generation_rate: Optional[float] = None,
+                 weekly_volume_variation: Optional[float] = None):
         super().__init__()
         
-        # Model parameters
-        self.num_carriers = num_carriers
-        self.grid_size = grid_size
-        self.time_step = time_step
-        self.load_generation_rate = load_generation_rate
-        self.weekly_volume_variation = weekly_volume_variation
+        # Load configuration
+        if config is None:
+            config = ConfigLoader()
+            config.load_config(scenario)
+        elif isinstance(config, dict):
+            # Direct config dict passed
+            pass
+        else:
+            # ConfigLoader instance
+            if not config._current_config:
+                config.load_config(scenario)
+        
+        # Get simulation parameters from config or defaults
+        if isinstance(config, ConfigLoader):
+            sim_params = config.get_simulation_params()
+        else:
+            sim_params = config.get('simulation', {})
+        
+        # Model parameters (with backward compatibility)
+        self.num_carriers = num_carriers if num_carriers is not None else sim_params.get('num_carriers', 20)
+        self.grid_size = grid_size if grid_size is not None else sim_params.get('grid_size', 100)
+        self.time_step = time_step if time_step is not None else sim_params.get('time_step', 0.1)
+        self.load_generation_rate = load_generation_rate if load_generation_rate is not None else sim_params.get('load_generation_rate', 0.3)
+        self.weekly_volume_variation = weekly_volume_variation if weekly_volume_variation is not None else sim_params.get('weekly_volume_variation', 0.2)
+        self.steps_per_week = sim_params.get('steps_per_week', 70)
+        
+        # Store config for agents to use
+        self.config = config
         self.current_step = 0
         self.current_week = 0
         
         # Mesa components  
         self.agent_list = []  # Simple list-based scheduling
         self.agent_id_map = {}
-        self.space = ContinuousSpace(grid_size, grid_size, torus=False)
+        self.space = ContinuousSpace(self.grid_size, self.grid_size, torus=False)
         
         # Create the freight broker
         self.broker = FreightTech("FreightTech", self)
@@ -45,10 +71,10 @@ class FreightBrokerageModel(Model):
         
         # Create carriers
         self.carriers: List[Carrier] = []
-        for i in range(num_carriers):
+        for i in range(self.num_carriers):
             # Random starting positions
-            x = random.uniform(0, grid_size)
-            y = random.uniform(0, grid_size)
+            x = random.uniform(0, self.grid_size)
+            y = random.uniform(0, self.grid_size)
             
             carrier = Carrier(f"Carrier_{i}", self, (x, y))
             self.carriers.append(carrier)
@@ -85,9 +111,10 @@ class FreightBrokerageModel(Model):
         
     def generate_initial_loads(self):
         """Generate some initial loads to start the simulation."""
+        load_config = self._get_load_config()
         initial_load_count = max(1, int(self.num_carriers * 0.8))  # Start with fewer loads than carriers
         for _ in range(initial_load_count):
-            load = Load.generate_random(self.grid_size)
+            load = Load.generate_random(self.grid_size, load_config)
             self.broker.add_load(load)
     
     def generate_new_loads(self):
@@ -98,8 +125,18 @@ class FreightBrokerageModel(Model):
         
         # Generate loads
         if random.random() < adjusted_rate:
-            load = Load.generate_random(self.grid_size)
+            load_config = self._get_load_config()
+            load = Load.generate_random(self.grid_size, load_config)
             self.broker.add_load(load)
+    
+    def _get_load_config(self):
+        """Get load configuration from config."""
+        if hasattr(self, 'config') and self.config:
+            if hasattr(self.config, 'get_load_params'):
+                return self.config.get_load_params()
+            elif isinstance(self.config, dict):
+                return self.config.get('load', {})
+        return {}
     
     def get_available_carriers(self) -> List[Carrier]:
         """Get list of carriers that are currently available for new loads."""
@@ -141,8 +178,8 @@ class FreightBrokerageModel(Model):
         """Execute one step of the model."""
         self.current_step += 1
         
-        # Check if we've entered a new week (assuming 70 steps per week)
-        new_week = self.current_step // 70
+        # Check if we've entered a new week
+        new_week = self.current_step // self.steps_per_week
         if new_week > self.current_week:
             self.current_week = new_week
             self.simulate_weekly_market_changes()
@@ -195,10 +232,43 @@ class FreightBrokerageModel(Model):
             print(f"⚠️  {summary['consecutive_failures']} consecutive load failures")
 
 
-# Convenience function to create and run a model
-def run_freight_simulation(steps: int = 1000, num_carriers: int = 20, verbose: bool = False):
-    """Run a freight brokerage simulation."""
+# Convenience functions to create and run models
+
+def run_freight_simulation_with_config(scenario: Optional[str] = None, steps: int = 1000, verbose: bool = False, generate_report: bool = False):
+    """Run a freight brokerage simulation using config file."""
+    config = ConfigLoader()
+    config.load_config(scenario)
+    
+    if scenario:
+        print(f"Running {scenario} scenario")
+    config.print_config_summary()
+    
+    model = FreightBrokerageModel(config=config)
+    model._scenario_name = scenario  # Store for reporting
+    
+    print(f"\nRunning simulation for {steps} steps...")
+    
+    for step in range(steps):
+        model.step()
+        
+        if verbose and step % 100 == 0:
+            model.print_status()
+    
+    print(f"\n=== Final Results ===")
+    model.print_status()
+    
+    # Generate experiment report if requested
+    if generate_report:
+        from experiment_reporter import ExperimentReporter
+        reporter = ExperimentReporter()
+        reporter.generate_full_report(model, config, scenario)
+    
+    return model
+
+def run_freight_simulation(steps: int = 1000, num_carriers: int = 20, verbose: bool = False, generate_report: bool = False):
+    """Run a freight brokerage simulation (backward compatibility)."""
     model = FreightBrokerageModel(num_carriers=num_carriers)
+    model._scenario_name = "custom"  # Store for reporting
     
     print(f"Starting freight brokerage simulation with {num_carriers} carriers...")
     print(f"Running for {steps} steps...")
@@ -212,9 +282,19 @@ def run_freight_simulation(steps: int = 1000, num_carriers: int = 20, verbose: b
     print(f"\n=== Final Results ===")
     model.print_status()
     
+    # Generate experiment report if requested
+    if generate_report:
+        from experiment_reporter import ExperimentReporter
+        from config_loader import ConfigLoader
+        # Create a default config for reporting
+        config = ConfigLoader()
+        config.load_config()
+        reporter = ExperimentReporter()
+        reporter.generate_full_report(model, config, "custom")
+    
     return model
 
 
 if __name__ == "__main__":
-    # Example run
-    model = run_freight_simulation(steps=500, num_carriers=15, verbose=True)
+    # Example run with config
+    model = run_freight_simulation_with_config(steps=500, verbose=True)

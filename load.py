@@ -29,17 +29,37 @@ class Load:
             self.id = str(uuid.uuid4())[:8]
     
     @classmethod
-    def generate_random(cls, grid_size: int = 100) -> 'Load':
+    def generate_random(cls, grid_size: int = 100, load_config: Optional[dict] = None) -> 'Load':
         """Generate a random load with realistic parameters."""
+        if load_config is None:
+            load_config = {}
+        
         origin = (random.uniform(0, grid_size), random.uniform(0, grid_size))
         destination = (random.uniform(0, grid_size), random.uniform(0, grid_size))
         
-        # Calculate distance for market rate (simplified pricing)
+        # Calculate distance for market rate using config
         distance = math.sqrt((destination[0] - origin[0])**2 + (destination[1] - origin[1])**2)
-        market_rate = max(500, distance * 2 + random.uniform(-100, 100))  # $2/mile base + variation
         
-        # Lead time mostly around 3 days with some variation
-        lead_time = random.choice([0.5, 1, 1, 2, 2, 3, 3, 3, 3, 4, 5])
+        pricing_config = load_config.get('pricing', {})
+        base_rate_per_mile = pricing_config.get('base_rate_per_mile', 2.0)
+        minimum_rate = pricing_config.get('minimum_rate', 500)
+        rate_variation = pricing_config.get('rate_variation', 100)
+        
+        market_rate = max(minimum_rate, distance * base_rate_per_mile + random.uniform(-rate_variation, rate_variation))
+        
+        # Generate lead time based on config distribution
+        lead_time_config = load_config.get('lead_time', {})
+        min_time = lead_time_config.get('min', 0.5)
+        max_time = lead_time_config.get('max', 5.0)
+        mean_time = lead_time_config.get('mean', 3.0)
+        std_time = lead_time_config.get('std', 1.0)
+        
+        # Generate lead time using normal distribution, clipped to min/max bounds
+        lead_time = random.normalvariate(mean_time, std_time)
+        lead_time = max(min_time, min(max_time, lead_time))
+        
+        # Get penalty rate from config
+        penalty_rate = load_config.get('penalty_rate', 0.20)
         
         return cls(
             id="",  # Will be auto-generated
@@ -47,7 +67,8 @@ class Load:
             destination=destination,
             market_rate=market_rate,
             lead_time=lead_time,
-            initial_lead_time=lead_time
+            initial_lead_time=lead_time,
+            penalty_rate=penalty_rate
         )
     
     def get_distance(self) -> float:

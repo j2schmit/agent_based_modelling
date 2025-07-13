@@ -16,17 +16,37 @@ class Carrier(Agent):
         self.is_available = True
         self.current_load: Optional[Load] = None
         
-        # Carrier characteristics
-        self.cost_per_mile = random.uniform(1.2, 1.8)  # Operating cost per mile
-        self.fixed_cost = random.uniform(100, 300)  # Fixed cost per load
-        self.desired_margin = random.uniform(0.15, 0.35)  # Profit margin target (15-35%)
-        self.max_bid_distance = random.uniform(200, 500)  # Max distance willing to travel to pickup
-        self.aggressiveness = random.uniform(0.1, 0.9)  # How aggressive in bidding (0-1)
+        # Load carrier characteristics from config
+        carrier_config = self._get_carrier_config()
+        
+        cost_range = carrier_config.get('cost_per_mile', {'min': 1.2, 'max': 1.8})
+        self.cost_per_mile = random.uniform(cost_range['min'], cost_range['max'])
+        
+        fixed_cost_range = carrier_config.get('fixed_cost', {'min': 100, 'max': 300})
+        self.fixed_cost = random.uniform(fixed_cost_range['min'], fixed_cost_range['max'])
+        
+        margin_range = carrier_config.get('desired_margin', {'min': 0.15, 'max': 0.35})
+        self.desired_margin = random.uniform(margin_range['min'], margin_range['max'])
+        
+        distance_range = carrier_config.get('max_bid_distance', {'min': 200, 'max': 500})
+        self.max_bid_distance = random.uniform(distance_range['min'], distance_range['max'])
+        
+        aggr_range = carrier_config.get('aggressiveness', {'min': 0.1, 'max': 0.9})
+        self.aggressiveness = random.uniform(aggr_range['min'], aggr_range['max'])
         
         # Tracking
         self.loads_completed = 0
         self.total_revenue = 0
         self.total_profit = 0
+    
+    def _get_carrier_config(self):
+        """Get carrier configuration from model."""
+        if hasattr(self.model, 'config') and self.model.config:
+            if hasattr(self.model.config, 'get_carrier_params'):
+                return self.model.config.get_carrier_params()
+            elif isinstance(self.model.config, dict):
+                return self.model.config.get('carrier', {})
+        return {}
         
     def get_distance_to_origin(self, load: Load) -> float:
         """Calculate distance from current position to load origin."""

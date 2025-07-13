@@ -1,0 +1,29 @@
+{
+  "simulation": {
+    "total_steps": 75,
+    "total_weeks": 1.0,
+    "num_carriers": 20,
+    "scenario": "aggressive_carriers"
+  },
+  "final_metrics": {
+    "coverage_rate": 1.0,
+    "total_loads_covered": 40,
+    "total_loads_expired": 0,
+    "broker_profit": 12504.495833930301,
+    "total_revenue": 23291.2158339303,
+    "total_cost": 10786.719999999998,
+    "total_penalties": 0.0,
+    "avg_carrier_revenue": 539.336,
+    "consecutive_failures": 0
+  },
+  "performance_trends": {
+    "coverage_rate_trend": 1.0,
+    "profit_growth_rate": 47.14039226836461,
+    "carrier_revenue_growth": 2.200026315789471
+  },
+  "market_metrics": {
+    "avg_utilization_rate": 1.0,
+    "profit_margin_avg": 53.3357510637553,
+    "load_generation_total": 40
+  }
+}
